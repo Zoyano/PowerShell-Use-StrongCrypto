@@ -58,6 +58,7 @@ function Check-TLS {
             $FWv2_64.SchUseStrongCrypto -eq 1 -and
             $FWv4_64.SystemDefaultTlsVersions -eq 1 -and
             $FWv4_64.SchUseStrongCrypto -eq 1
+            # Add as an or for Server 4294967295
         ) {
             Return 'yes'
         }
@@ -86,6 +87,13 @@ function Add-TLS {
     if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
+
+    $Path2 = @("HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client",
+        "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server")
+
+        foreach ($x in $Path2) {
+            Write-Host "The path is $Path2[$x]"
+        }
 
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
     if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
