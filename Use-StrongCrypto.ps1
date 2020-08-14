@@ -1,41 +1,34 @@
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator"))
-{
-  $arguments = "& '" + $myinvocation.mycommand.definition + "'"
-  Start-Process powershell -Verb runAs -ArgumentList $arguments
-  break
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
+    $arguments = "& '" + $myinvocation.mycommand.definition + "'"
+    Start-Process powershell -Verb runAs -ArgumentList $arguments
+    break
 }
 
 <#
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" c:\temp\1.reg
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" c:\temp\2.reg
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" c:\temp\3.reg
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" c:\temp\4.reg
+$RegBackupPath = "C:\Temp\TLSRegBackup"
+$DateTime = Get-Date -Format MMddyyyyTHHmmss
+
+# If EAF_Backup folder exists, rename it to append current date/time
+if (Test-Path -Path $RegBackupPath){
+      Rename-Item -Path $RegBackupPath -NewName "TLSRegBackup_$DateTime" -WhatIf:$false
+}
+
+New-Item -ItemType Directory $RegBackupPath -WhatIf:$false
+
+REG EXPORT  "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\" "C:\Temp\TLSRegBackup\TLS_Client.reg"
+REG EXPORT  "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\" "C:\Temp\TLSRegBackup\TLS_Server.reg"
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" "C:\Temp\TLSRegBackup\FWv2_32.reg"
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" "C:\Temp\TLSRegBackup\FWv2_64.reg"
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" "C:\Temp\TLSRegBackup\FWv4_32.reg"
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" "C:\Temp\TLSRegBackup\FWv4_64.reg"
 #>
 
 <#
 .Synopsis
-A very brief description of the function. It begins with a verb and tells the user what the function does. It does not include the function name or how the function works. The function synopsis appears in the SYNOPSIS field of all help views.
 
 .Description
-Two or three full sentences that briefly list everything that the function can do. The description begins with "The <function name> function…." If the function can get multiple objects or take multiple inputs, use plural nouns in the description. The description appears in the DESCRIPTION field of all Help views.
-
-.PARAMETER something
-Brief and thorough. Describe what the function does when the parameter is used. And what legal values are for the parameter. The parameter appears in the PARAMETERS field only in Detailed and Full Help views.
 
 .Example
-Illustrate use of function with all its parameters. First example is simplest with only the required parameters. Last example is most complex and should incorporate pipelining if appropriate. The example appears only in the EXAMPLES field in the Example, Detailed, and Full Help views.
-
-.Inputs
-Lists the .NET Framework classes of objects the function will accept as input. There is no limit to the number of input classes you may list. The inputs Help tag appears only in the INPUTS field in the Full Help view.
-
-.Outputs
-Lists the .NET Framework classes of objects the function will emit as output. There is no limit to the number of output classes you may list. The outputs Help tag appears in the OUTPUTS field only in the Full Help view.
-
-.Notes
-Provides a place to list information that does not fit easily into the other sections. This can be special requirements required by the function, as well as author, title, version, and other information. The notes Help tag appear in the NOTES field only in the Full help view.
-
-.Link
-Provides links to other Help topics and Internet Web sites of interest. Because these links appear in a command window, they are not direct links. There is no limit to the number of links you may provide. The links appear in the RELATED LINKS field in all Help views.
 #>
 
 # To Query and Add TLS 1.2 Strong Crypto Keys
@@ -85,66 +78,65 @@ function Check-TLS {
 
 function Add-TLS {
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
 
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
 
-
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
 }
 
 function Remove-TLS {
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     New-ItemProperty -Name Enabled -PropertyType DWord -Value 0 -Force -Path $Path
 
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     New-ItemProperty -Name Enabled -PropertyType DWord -Value 0 -Force -Path $Path
 
 
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
 
     $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
-    New-Item -Path $Path -Force
+    if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
     New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
 }
