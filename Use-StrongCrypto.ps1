@@ -1,3 +1,17 @@
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator"))
+{
+  $arguments = "& '" + $myinvocation.mycommand.definition + "'"
+  Start-Process powershell -Verb runAs -ArgumentList $arguments
+  break
+}
+
+<#
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" c:\temp\1.reg
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" c:\temp\2.reg
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" c:\temp\3.reg
+REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" c:\temp\4.reg
+#>
+
 <#
 .Synopsis
 A very brief description of the function. It begins with a verb and tells the user what the function does. It does not include the function name or how the function works. The function synopsis appears in the SYNOPSIS field of all help views.
@@ -29,97 +43,136 @@ Provides links to other Help topics and Internet Web sites of interest. Because 
 #$PSVersionTable.PSVersion
 
 Clear-Host
+function Check-TLS {
 
+    try {
+        $TLS_Client = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" -ErrorAction Stop
+        $TLS_Server = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server" -ErrorAction Stop
+        $FWv2_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" -ErrorAction Stop
+        $FWv4_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" -ErrorAction Stop
+        $FWv2_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727" -ErrorAction Stop
+        $FWv4_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -ErrorAction Stop
 
+        if ($TLS_Client.DisabledByDefault -eq 0 -and
+            $TLS_Client.Enabled -eq 1 -and
+            $TLS_Server.DisabledByDefault -eq 0 -and
+            $TLS_Server.Enabled -eq 1 -and
+            $FWv2_32.SystemDefaultTlsVersions -eq 1 -and
+            $FWv2_32.SchUseStrongCrypto -eq 1 -and
+            $FWv4_32.SystemDefaultTlsVersions -eq 1 -and
+            $FWv4_32.SchUseStrongCrypto -eq 1 -and
+            $FWv2_64.SystemDefaultTlsVersions -eq 1 -and
+            $FWv2_64.SchUseStrongCrypto -eq 1 -and
+            $FWv4_64.SystemDefaultTlsVersions -eq 1 -and
+            $FWv4_64.SchUseStrongCrypto -eq 1
+        ) {
+            Return 'yes'
+        }
 
-try {
-    $TLS_Client = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" -ErrorAction Stop
-    $TLS_Server = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server" -ErrorAction Stop
-    $FWv2_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" -ErrorAction Stop
-    $FWv4_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" -ErrorAction Stop
-    $FWv2_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727" -ErrorAction Stop
-    $FWv4_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -ErrorAction Stop
+        else {
+            Return 'no'
+        }
+    }
 
-    Write-Host "**All keys are present**" -ForegroundColor Green
+    catch [System.Management.Automation.ItemNotFoundException] {
+        Return 'no'
+    }
 
-    #Write-Host "TLS 1.2\Client DisabledByDefault is" $TLS_Client.DisabledByDefault "and Enabled" $TLS_Client.Enabled
-    #$TLS_Client.DisabledByDefault
-    # $TLS_Client.Enabled
-
-    #Write-Host "TLS 1.2\Server DisabledByDefault is" $TLS_Server.DisabledByDefault "and Enabled" $TLS_Server.Enabled
-    # $TLS_Server.DisabledByDefault
-    # $TLS_Server.Enabled
-
-    # $FWv2_32.SystemDefaultTlsVersions
-    # $FWv2_32.SchUseStrongCrypto
-
-    # $FWv4_32.SystemDefaultTlsVersions
-    # $FWv4_32.SchUseStrongCrypto
-
-    # $FWv2_64.SystemDefaultTlsVersions
-    # $FWv2_64.SchUseStrongCrypto
-
-    # $FWv4_64.SystemDefaultTlsVersions
-    # $FWv4_64.SchUseStrongCrypto
+    catch {
+        Write-Host "There was some other error other than the registry entries not being found"
+    }
 }
 
-catch [System.Management.Automation.ItemNotFoundException] {
-    Write-Host "**At least one registry key is missing, please run update to add the keys**" -ForegroundColor Red
+function Add-TLS {
+    $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
+    New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
+
+    $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
+    New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
+
+
+    $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 1 -Force -Path $Path
 }
 
-catch {
-    Write-Host "Something else"
+function Remove-TLS {
+    $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
+    New-ItemProperty -Name Enabled -PropertyType DWord -Value 0 -Force -Path $Path
+
+    $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
+    New-ItemProperty -Name Enabled -PropertyType DWord -Value 0 -Force -Path $Path
+
+
+    $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
+
+    $Path = "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
+    New-Item -Path $Path -Force
+    New-ItemProperty -Name SystemDefaultTlsVersions -PropertyType DWord -Value 1 -Force -Path $Path
+    New-ItemProperty -Name SchUseStrongCrypto -PropertyType DWord -Value 0 -Force -Path $Path
 }
 
-<#
-$TLS_Client = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
-$TLS_Client.DisabledByDefault
-$TLS_Client.Enabled
+function Exit-App {
+    Write-Host "Press Enter to exit..." -ForegroundColor Yellow
+    $x = Read-Host
+}
 
-$TLS_Server = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
-$TLS_Server.DisabledByDefault
-$TLS_Server.Enabled
+$Present = Check-TLS
+if ($Present -eq 'yes') {
+    Write-Host "**All TLS 1.2 registry keys are present**" -ForegroundColor Green
+    Exit-App
+}
 
-$FWv2_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
-$FWv2_32.SystemDefaultTlsVersions
-$FWv2_32.SchUseStrongCrypto
+elseif ($Present -eq 'no') {
+    Write-Host "****At least one registry key is missing, please run update to add the keys****" -ForegroundColor Red
+    $x = Read-Host -Prompt "Do you want to add the registry entries? (Y)es or Enter for No"
 
-$FWv4_32 = Get-ItemProperty "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319"
-$FWv4_32.SystemDefaultTlsVersions
-$FWv4_32.SchUseStrongCrypto
+    if ($x -eq 'y') {
+        Write-Host "****Adding TLS 1.2 Registry keys...****" -ForegroundColor Green
+        Add-TLS
+        Write-Host "****Finished adding the TLS 1.2 Registry Keys****" -ForegroundColor Green
+        Exit-App
+    }
 
-$FWv2_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727"
-$FWv2_64.SystemDefaultTlsVersions
-$FWv2_64.SchUseStrongCrypto
-
-$FWv4_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
-$FWv4_64.SystemDefaultTlsVersions
-$FWv4_64.SchUseStrongCrypto
-#>
-
-<#
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client]
-"DisabledByDefault"=dword:00000000
-"Enabled"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server]
-"DisabledByDefault"=dword:00000000
-"Enabled"=dword:00000001
- 
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727]
-"SystemDefaultTlsVersions"=dword:00000001
-"SchUseStrongCrypto"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319]
-"SystemDefaultTlsVersions"=dword:00000001
-"SchUseStrongCrypto"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727]
-"SystemDefaultTlsVersions"=dword:00000001
-"SchUseStrongCrypto"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319]
-"SystemDefaultTlsVersions"=dword:00000001
-"SchUseStrongCrypto"=dword:00000001
-#>
+    else {
+        Write-Host "****Not changing anything****" -ForegroundColor Green
+        Exit-App
+    }
+}
