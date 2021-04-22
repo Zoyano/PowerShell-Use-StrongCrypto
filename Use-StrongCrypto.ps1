@@ -5,25 +5,6 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 <#
-$RegBackupPath = "C:\Temp\TLSRegBackup"
-$DateTime = Get-Date -Format MMddyyyyTHHmmss
-
-# If EAF_Backup folder exists, rename it to append current date/time
-if (Test-Path -Path $RegBackupPath){
-      Rename-Item -Path $RegBackupPath -NewName "TLSRegBackup_$DateTime" -WhatIf:$false
-}
-
-New-Item -ItemType Directory $RegBackupPath -WhatIf:$false
-
-REG EXPORT  "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\" "C:\Temp\TLSRegBackup\TLS_Client.reg"
-REG EXPORT  "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\" "C:\Temp\TLSRegBackup\TLS_Server.reg"
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" "C:\Temp\TLSRegBackup\FWv2_32.reg"
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" "C:\Temp\TLSRegBackup\FWv2_64.reg"
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" "C:\Temp\TLSRegBackup\FWv4_32.reg"
-REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" "C:\Temp\TLSRegBackup\FWv4_64.reg"
-#>
-
-<#
 .Synopsis
 
 .Description
@@ -34,6 +15,7 @@ REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" "C:\
 # To Query and Add TLS 1.2 Strong Crypto Keys
 
 #$PSVersionTable.PSVersion
+#$nwh variables mean No Write Host, just capturing output
 
 Clear-Host
 
@@ -50,7 +32,7 @@ function Get-TLS {
     $FWv2_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v2.0.50727" -ErrorAction  Ignore
     $FWv4_64 = Get-ItemProperty "HKLM:SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -ErrorAction  Ignore
 
-    Write-Host "****TLS Client, Server, 32-bit, then 64-bit****" -ForegroundColor Green
+    Write-Host "****Listing the registry entries in this order: TLS Client, Server, 32-bit .NET, then 64-bit .NET****" -ForegroundColor Green
     ($TLS_Client, $TLS_Server, $FWv2_32, $FWv4_32, $FWv2_64, $FWv4_64) | Format-Table -Wrap -AutoSize -Property DisabledByDefault, Enabled, SystemDefaultTlsVersions, SchUseStrongCrypto, PSChildName
 
     <#
@@ -109,7 +91,34 @@ function Check-TLS {
     }
 }
 
+function Backup-TLS {
+    $RegBackupPath = "C:\Temp\TLSRegBackup"
+    $DateTime = Get-Date -Format MMddyyyyTHHmmss
+    $RenamedPath = "TLSRegBackup_$DateTime"
+
+    Write-Host "****Backing up registry entries to $RegBackupPath****" -ForegroundColor Green
+
+    # If TLSRegBackup folder exists, rename it to append current date/time
+    if (Test-Path -Path $RegBackupPath) {
+        Write-Host "****Existing TLSRegBackup found, renaming folder to $RenamedPath****" -ForegroundColor Red
+        Rename-Item -Path $RegBackupPath -NewName $RenamedPath -WhatIf:$false
+        #Rename-Item -Path $RegBackupPath -NewName "TLSRegBackup_$DateTime" -WhatIf:$false
+    }
+    
+    $nwh = New-Item -ItemType Directory $RegBackupPath -WhatIf:$false
+    
+    $nwh = REG EXPORT "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\" "$RegBackupPath\SCHANNEL_Protocols.reg"
+    $nwh = REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727" "$RegBackupPath\FWv2_32.reg"
+    $nwh = REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" "$RegBackupPath\FWv2_64.reg"
+    $nwh = REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" "$RegBackupPath\FWv4_32.reg"
+    $nwh = REG EXPORT "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" "$RegBackupPath\FWv4_64.reg"
+
+    Write-Host "****Backup Complete to $RegBackupPath****" -ForegroundColor Green
+}
+
 function Add-TLS {
+    Backup-TLS
+
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
     if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     $nwh = New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
@@ -120,12 +129,14 @@ function Add-TLS {
     $nwh = New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
     $nwh = New-ItemProperty -Name Enabled -PropertyType DWord -Value 1 -Force -Path $Path
 
+    <#
     $Path2 = @("HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client",
         "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server")
 
     foreach ($x in $Path2) {
         Write-Host "The path is $x"
     }
+    #>
 
     $Path = "HKLM:SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727"
     if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
@@ -149,6 +160,8 @@ function Add-TLS {
 }
 
 function Remove-TLS {
+    Backup-TLS
+
     $Path = "HKLM:SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
     if (-Not (Test-Path $Path)) { New-Item -Path $Path -Force }
     $nwh = New-ItemProperty -Name DisabledByDefault -PropertyType DWord -Value 0 -Force -Path $Path
@@ -196,7 +209,10 @@ if ($Present -eq 'yes') {
         Get-TLS  
         Exit-App
     }
-    
+    elseif ($x -eq "r") {
+        Remove-TLS
+        Exit-App
+    }    
 }
 
 elseif ($Present -eq 'no') {
